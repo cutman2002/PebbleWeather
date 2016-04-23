@@ -1,0 +1,187 @@
+// The compete code for the app version 2.0
+var UI = require('ui');
+var ajax = require('ajax');
+var Vector2 = require('vector2');
+var Accel = require('ui/accel');
+var Vibe = require('ui/vibe');
+
+var myAPIKey = '2a5db3241ca238a6ca330cf8f88f3b47';
+
+var parseFeed = function(data, quantity) {
+  var items = [];
+  for(var i = 0; i < quantity; i++) {
+    // Always upper case the description string
+    var title = data.list[i].weather[0].main;
+    title = title.charAt(0).toUpperCase() + title.substring(1);
+
+    // Get date/time substring
+    var time = data.list[i].dt_txt;
+    time = time.substring(time.indexOf('-') + 1, time.indexOf(':') + 3);
+
+    // Add to menu items array
+    items.push({
+      title:title,
+      subtitle:time
+    });
+  }
+
+  // Finally return whole array
+  return items;
+};
+
+// Show splash screen while waiting for data
+var splashWindow = new UI.Window();
+
+// Text element to inform user
+var text = new UI.Text({
+  position: new Vector2(0, 0),
+  size: new Vector2(144, 168),
+  text:'Downloading weather data...',
+  font:'DROID_SERIF_28_BOLD',
+  color:'blue',
+  textOverflow:'wrap',
+  textAlign:'center',
+	backgroundColor:'white'
+});
+
+// Add to splashWindow and show
+splashWindow.add(text);
+splashWindow.show();
+
+
+var main = new UI.Card({
+  title: 'Weather',
+  subtitle: 'Ready To Go?',
+  body: 'Press any button',
+  subtitleColor: 'indigo', // Named colors
+  bodyColor: '#9a0036', // Hex colors
+  titleColor:'##1edb34',
+  backgroundColor:'white'
+});
+
+// Create a Card with title and subtitle
+var card = new UI.Card({
+  title:'Weather',
+  subtitle:'Gettin it ...',
+  titleColor: '#00D9FF',
+  subtitleColor:'#FF00F7',
+  bodyColor: '#319E0C'
+});
+main.on('click', 'select', function(e) {
+// Display the Card
+card.show();
+});
+// Make the request
+ajax(
+  {
+    url: 'http://api.openweathermap.org/data/2.5/weather?q=Claremont&appid=' + myAPIKey,
+    type: 'json'
+  },
+  function(data) {
+    // Success!
+    console.log("Successfully got that weather data!");
+
+    // Extract data
+    var wind = data.wind.speed;
+    var location = data.name;
+    var temperature = Math.round((data.main.temp - 273.15)* 1.8 + 32) + "F";
+   
+    
+    // Always upper-case first letter of description
+    var description = data.weather[0].description;
+    description = description.charAt(0).toUpperCase() + description.substring(1);
+
+    // Show to user
+    card.subtitle(location + ", " + temperature + ",        " + wind +"mph,");
+    card.body(description);
+  },
+ function(error) {
+    // Failure!
+    console.log('Couldnt get that weather data : ' + error+ 'error number: ΔΔΔ');
+  }
+);
+
+// Make request to openweathermap.org
+ajax(
+  {
+    url:'http://api.openweathermap.org/data/2.5/forecast?q=Claremont&appid=' + myAPIKey,
+    type:'json'
+  },
+  function(data) {
+    // Create an array of Menu items
+    var menuItems = parseFeed(data, 10);
+
+    // Construct Menu to show to user
+    var resultsMenu = new UI.Menu({
+      sections: [{
+        title: 'Forecast',
+        items: menuItems
+      }]
+    });
+
+    // Add an action for SELECT
+resultsMenu.on('select', function(e) {
+  // Get that forecast
+  var forecast = data.list[e.itemIndex];
+
+  // Assemble body string
+  var content = data.list[e.itemIndex].weather[0].description;
+
+  // Capitalize first letter
+  content = content.charAt(0).toUpperCase() + content.substring(1);
+
+  // Add temperature, pressure etc
+  content += '\nTemperature: ' + Math.round((forecast.main.temp - 273.15)* 1.8 + 32)  + '°F' 
+  + '\nPressure: ' + Math.round(forecast.main.pressure) + ' mbar' +
+    '\nWind: ' + Math.round(forecast.wind.speed) + ' mph, ' + 
+    Math.round(forecast.wind.deg) + '°';
+
+      // Create the Card for detailed view
+      var detailCard = new UI.Card({
+        title:'Details',
+        subtitle:e.item.subtitle,
+        body: content
+      });
+      detailCard.show();
+    });
+
+    // Show the Menu, hide the splash
+    
+   
+    main.show();
+    splashWindow.hide();
+   main.on('click', 'up', function(e) {
+      resultsMenu.show();
+    });
+    // Register for 'tap' events
+    resultsMenu.on('accelTap', function(e) {
+      // Make another request to openweathermap.org
+      ajax(
+        {
+          url:'http://api.openweathermap.org/data/2.5/forecast?q=Claremont&appid=' + myAPIKey,
+          type:'json'
+        },
+        function(data) {
+          // Create an array of Menu items
+          var newItems = parseFeed(data, 10);
+          
+          // Update the Menu's first section
+          resultsMenu.items(0, newItems);
+          
+          // Notify the user
+          Vibe.vibrate('short');
+        },
+        function(error) {
+          console.log('Download failed: ' + error);
+        }
+      );
+    });
+  },
+  function(error) {
+    console.log("Download failed: " + error);
+  }
+);
+//});
+// Prepare the accelerometer
+Accel.init();
+
